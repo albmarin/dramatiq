@@ -21,6 +21,7 @@ from collections import defaultdict
 from itertools import chain
 from queue import Empty, PriorityQueue
 from threading import Event, Thread
+import asyncio
 
 from .common import current_millis, iter_queue, join_all, q_name
 from .errors import ActorNotFound, ConnectionError, RateLimitExceeded, Retry
@@ -467,7 +468,11 @@ class _WorkerThread(Thread):
             res = None
             if not message.failed:
                 actor = self.broker.get_actor(message.actor_name)
-                res = actor(*message.args, **message.kwargs)
+                if asyncio.iscoroutinefunction(actor):
+                    loop = asyncio.get_event_loop()
+                    res = loop.run_until_complete(actor(*message.args, **message.kwargs))
+                else:
+                    res = actor(*message.args, **message.kwargs)
 
             self.broker.emit_after("process_message", message, result=res)
 
